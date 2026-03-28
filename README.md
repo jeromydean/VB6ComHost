@@ -6,8 +6,6 @@
 
 ## ⚠️ VB6 runtime message this project addresses
 
-If you are searching for the exact text you see at run time, it is:
-
 > **Non-modal forms cannot be displayed in this host application from an ActiveX DLL, ActiveX Control, or Property Page.**
 
 That message appears when VB6 decides the host is **not** a suitable container for **modeless** UI from an **ActiveX DLL** (or related binaries). In code, the same gate is often reflected as **`App.NonModalAllowed`** being **False** when you expected modeless forms to work. The hosting pattern here is aimed at satisfying the checks behind that message—together with a proper **STA** thread and a **Windows message pump**—so modeless VB6 forms can run inside a .NET process.
