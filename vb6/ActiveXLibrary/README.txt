@@ -2,8 +2,12 @@ ActiveXLibrary (VB6)
 =====================
 
 Sample 32-bit ActiveX DLL used by VB6ComHost.ConsoleSample. It exposes class
-WindowLauncher (ProgID ActiveXLibrary.WindowLauncher) with ShowNonModal, which
-shows Form1 modelessly.
+WindowLauncher (ProgID ActiveXLibrary.WindowLauncher) with ShowNonModal /
+ShowModal. Each call sets the form caption to "VB6 modeless #n" or
+"VB6 modal #n" when the host passes an instance number (optional in VB).
+
+After editing WindowLauncher.cls, rebuild the DLL and copy it to
+lib/com/x86/ActiveXLibrary.dll (or your output folder), then re-register.
 
 Build in Visual Basic 6 (File > Make ActiveXLibrary.dll). The checked-in binary
 for convenience lives at:

@@ -66,6 +66,9 @@ namespace VB6ComHost.ConsoleSample
       Console.WriteLine("  While a modal form is open, this thread is inside VB6 and other non-modal");
       Console.WriteLine("  forms may not get messages until the modal form closes.");
       Console.WriteLine();
+      Console.WriteLine("  Tip: If you open a modeless window (N) and then a modal (M), closing the modal");
+      Console.WriteLine("  prints \"returned\" while the modeless window can still be open — check titles.");
+      Console.WriteLine();
     }
 
     private static void KeyboardLoop()
@@ -115,17 +118,20 @@ namespace VB6ComHost.ConsoleSample
     {
       int n = Interlocked.Increment(ref s_spawnCount);
       dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
-      launcher.ShowNonModal();
-      Console.WriteLine("  🪟 Non-modal #" + n + "  (Caption: Form1 — close the VB6 form when done)");
+      launcher.ShowNonModal(n);
+      Console.WriteLine("  🪟 Non-modal #" + n + "  (title: \"VB6 modeless #" + n + "\")");
+      Console.Out.Flush();
     }
 
     private static void SpawnModal(VB6ComHost host)
     {
       int n = Interlocked.Increment(ref s_spawnCount);
       dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
-      Console.WriteLine("  🔒 Modal #" + n + "  (blocks until you close the VB6 form)...");
-      launcher.ShowModal();
-      Console.WriteLine("  ✅ Modal #" + n + " returned.");
+      Console.WriteLine("  🔒 Modal #" + n + "  opening (title: \"VB6 modal #" + n + "\") — next line appears only after you close that window.");
+      Console.Out.Flush();
+      launcher.ShowModal(n);
+      Console.WriteLine("  ✅ Modal #" + n + " closed (only the modal #" + n + " window should be gone).");
+      Console.Out.Flush();
     }
   }
 }
