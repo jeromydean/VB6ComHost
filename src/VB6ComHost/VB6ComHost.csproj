@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>VB6ComHost</RootNamespace>
+    <AssemblyName>VB6ComHost</AssemblyName>
+    <Description>Managed STA OLE message filter and IServiceProvider shim for VB6 ActiveX DLL modeless UI (netstandard2.0, Windows-only).</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+</Project>

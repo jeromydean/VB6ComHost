@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="VB6ComHost.ConsoleSample/VB6ComHost.ConsoleSample.csproj" Id="62a77cff-afc1-4996-8047-d41c3219197f" />
+  <Project Path="VB6ComHost/VB6ComHost.csproj" />
+</Solution>
