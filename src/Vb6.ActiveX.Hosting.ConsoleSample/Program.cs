@@ -158,10 +158,13 @@ namespace Vb6.ActiveX.Hosting.ConsoleSample
     private static void SpawnModalSync(ComHost host)
     {
       int n = Interlocked.Increment(ref s_spawnCount);
-      dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
-      Console.WriteLine("  🔒 Sync modal #" + n + "  CreateInstance + ShowModal — menu waits until you close it.");
+      Console.WriteLine("  🔒 Sync modal #" + n + "  Invoke(CreateInstance + ShowModal) — menu waits; title-bar X should close it.");
       Console.Out.Flush();
-      launcher.ShowModal(n);
+      host.Invoke(() =>
+      {
+        dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
+        launcher.ShowModal(n);
+      });
       Console.WriteLine("  ✅ Sync modal #" + n + " closed.");
       Console.Out.Flush();
     }

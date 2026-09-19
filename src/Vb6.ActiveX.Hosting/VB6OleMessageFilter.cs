@@ -31,7 +31,7 @@ namespace Vb6.ActiveX.Hosting.Interop
   internal sealed class VB6OleMessageFilter : IMessageFilter, ICustomQueryInterface
   {
       private const uint SERVERCALL_ISHANDLED = 0;
-      private const uint PENDINGMSG_CANCELCALL = 0;
+      private const uint PENDINGMSG_WAITDEFPROCESS = 2;
 
       CustomQueryInterfaceResult ICustomQueryInterface.GetInterface(ref Guid iid, out IntPtr ppv)
       {
@@ -59,7 +59,7 @@ namespace Vb6.ActiveX.Hosting.Interop
 
       public uint MessagePending(IntPtr htaskCallee, uint dwTickCount, uint dwPendingType)
       {
-          return PENDINGMSG_CANCELCALL;
+          return PENDINGMSG_WAITDEFPROCESS;
       }
   }
 

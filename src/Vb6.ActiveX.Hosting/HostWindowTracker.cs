@@ -15,8 +15,12 @@ namespace Vb6.ActiveX.Hosting
   internal sealed class HostWindowTracker : IDisposable
   {
     private const int WH_CBT = 5;
+    private const int WH_MOUSE = 7;
     private const int HCBT_CREATEWND = 3;
     private const int HCBT_DESTROYWND = 4;
+    private const int HC_ACTION = 0;
+    private const uint WM_NCLBUTTONDOWN = 0x00A1;
+    private const uint HTCLOSE = 20;
     private const int HWND_MESSAGE = -3;
     private const uint WM_APP = 0x8000;
     private const uint WM_CLASSIFY = WM_APP + 0x6C01;
@@ -28,12 +32,14 @@ namespace Vb6.ActiveX.Hosting
     private readonly string _sinkClassName = "Vb6.ActiveX.Hosting.WindowSink." + Guid.NewGuid().ToString("N");
     private readonly ComHost _host;
     private readonly CbtProc _cbtProc;
+    private readonly MouseProc _mouseProc;
     private readonly WndProc _wndProc;
     private readonly HashSet<IntPtr> _pending = new HashSet<IntPtr>();
     private readonly Dictionary<IntPtr, HostWindowEventArgs> _open = new Dictionary<IntPtr, HostWindowEventArgs>();
     private readonly object _gate = new object();
 
     private IntPtr _hook;
+    private IntPtr _mouseHook;
     private IntPtr _sink;
     private IntPtr _sinkModule;
     private bool _classRegistered;
@@ -41,18 +47,28 @@ namespace Vb6.ActiveX.Hosting
 
     private delegate IntPtr CbtProc(int nCode, IntPtr wParam, IntPtr lParam);
 
+    private delegate IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
     private delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     internal HostWindowTracker(ComHost host)
     {
       _host = host ?? throw new ArgumentNullException(nameof(host));
       _cbtProc = OnCbt;
+      _mouseProc = OnMouse;
       _wndProc = OnSink;
       _sink = CreateSinkWindow();
-      _hook = SetWindowsHookEx(WH_CBT, _cbtProc, IntPtr.Zero, GetCurrentThreadId());
+      uint threadId = GetCurrentThreadId();
+      _hook = SetWindowsHookEx(WH_CBT, _cbtProc, IntPtr.Zero, threadId);
       if (_hook == IntPtr.Zero)
       {
-        Debug.WriteLine("HostWindowTracker: SetWindowsHookEx failed, err=" + Marshal.GetLastWin32Error());
+        Debug.WriteLine("HostWindowTracker: SetWindowsHookEx CBT failed, err=" + Marshal.GetLastWin32Error());
+      }
+
+      _mouseHook = SetWindowsHookExMouse(WH_MOUSE, _mouseProc, IntPtr.Zero, threadId);
+      if (_mouseHook == IntPtr.Zero)
+      {
+        Debug.WriteLine("HostWindowTracker: SetWindowsHookEx mouse failed, err=" + Marshal.GetLastWin32Error());
       }
     }
 
@@ -77,6 +93,28 @@ namespace Vb6.ActiveX.Hosting
       if (hwnd != IntPtr.Zero)
       {
         PromoteToModal(hwnd);
+        EnsureEnabled(hwnd);
+      }
+    }
+
+    internal void EnsureModalEnabled()
+    {
+      List<IntPtr> modal;
+      lock (_gate)
+      {
+        modal = new List<IntPtr>();
+        foreach (KeyValuePair<IntPtr, HostWindowEventArgs> pair in _open)
+        {
+          if (pair.Value.Kind == HostWindowKind.Modal)
+          {
+            modal.Add(pair.Key);
+          }
+        }
+      }
+
+      foreach (IntPtr hwnd in modal)
+      {
+        EnsureEnabled(hwnd);
       }
     }
 
@@ -191,6 +229,12 @@ namespace Vb6.ActiveX.Hosting
         _hook = IntPtr.Zero;
       }
 
+      if (_mouseHook != IntPtr.Zero)
+      {
+        _ = UnhookWindowsHookEx(_mouseHook);
+        _mouseHook = IntPtr.Zero;
+      }
+
       if (_sink != IntPtr.Zero)
       {
         _ = DestroyWindow(_sink);
@@ -233,6 +277,28 @@ namespace Vb6.ActiveX.Hosting
       }
 
       return CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    private IntPtr OnMouse(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+      if (nCode == HC_ACTION && !_disposed && lParam != IntPtr.Zero)
+      {
+        uint message = unchecked((uint)wParam.ToInt32());
+        if (message == WM_NCLBUTTONDOWN || message == 0x0201)
+        {
+          MouseHookStruct info = (MouseHookStruct)Marshal.PtrToStructure(lParam, typeof(MouseHookStruct))!;
+          if (info.hitTest == HTCLOSE)
+          {
+            IntPtr hwnd = info.hwnd != IntPtr.Zero ? info.hwnd : WindowFromPoint(info.pt);
+            if (IsVb6Form(hwnd))
+            {
+              PostClose(hwnd);
+            }
+          }
+        }
+      }
+
+      return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
     }
 
     private IntPtr OnSink(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -302,6 +368,8 @@ namespace Vb6.ActiveX.Hosting
         opened = new HostWindowEventArgs(hwnd, HostWindowKind.Modal, ReadTitle(hwnd), PostClose);
         _open[hwnd] = opened;
       }
+
+      EnsureEnabled(hwnd);
 
       _host.RaiseWindowOpened(opened);
     }
@@ -415,6 +483,14 @@ namespace Vb6.ActiveX.Hosting
       return sb.ToString();
     }
 
+    private static void EnsureEnabled(IntPtr hwnd)
+    {
+      if (hwnd != IntPtr.Zero && IsWindow(hwnd))
+      {
+        _ = EnableWindow(hwnd, true);
+      }
+    }
+
     private static string ReadTitle(IntPtr hwnd)
     {
       int len = GetWindowTextLength(hwnd);
@@ -426,6 +502,22 @@ namespace Vb6.ActiveX.Hosting
       StringBuilder sb = new StringBuilder(len + 1);
       _ = GetWindowText(hwnd, sb, sb.Capacity);
       return sb.ToString();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+      public int x;
+      public int y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MouseHookStruct
+    {
+      public Point pt;
+      public IntPtr hwnd;
+      public uint hitTest;
+      public UIntPtr extraInfo;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -445,6 +537,9 @@ namespace Vb6.ActiveX.Hosting
 
     [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, CbtProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowsHookExW", SetLastError = true)]
+    private static extern IntPtr SetWindowsHookExMouse(int idHook, MouseProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -492,6 +587,13 @@ namespace Vb6.ActiveX.Hosting
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool EnableWindow(IntPtr hWnd, [MarshalAs(UnmanagedType.Bool)] bool bEnable);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr WindowFromPoint(Point point);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetClassNameW")]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);

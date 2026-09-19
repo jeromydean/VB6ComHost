@@ -21,7 +21,7 @@ using (ComHost host = ComHost.Open())
 }
 ```
 
-`CreateInstance` runs on the host STA thread. The host tracks each RCW and releases it on `Dispose` (or earlier via `Release`). Do not call `Marshal.ReleaseComObject`.
+`CreateInstance` (non-generic) returns a late-bound proxy: `ShowModal` / `ShowNonModal` run on the host STA thread, so a modal form can be closed with the title-bar close box or `CloseWindows()`. The host tracks each RCW and releases it on `Dispose` (or earlier via `Release`). Do not call `Marshal.ReleaseComObject`. `CreateInstance<T>` returns the raw RCW — call UI methods through `Invoke` / `InvokeAsync`.
 
 `Show vbModal` blocks the caller until the form closes. From another thread, `CloseWindows()` or `HostWindowEventArgs.Close()` posts `WM_CLOSE`.
 

@@ -121,21 +121,25 @@ namespace Vb6.ActiveX.Hosting
 
     /// <summary>
     /// Creates a COM object by ProgID on the host STA thread (late-bound friendly: assign to <c>dynamic</c>).
+    /// Method and property calls on the returned object also run on that thread, so
+    /// <c>Show vbModal</c> can be closed (same as <see cref="Invoke"/>).
     /// The host owns the RCW until <see cref="Release"/> or <see cref="Dispose()"/>.
+    /// Use <see cref="CreateInstance{T}(string)"/> for a raw typed RCW.
     /// </summary>
     public object CreateInstance(string progId)
     {
-      return Invoke(() => Track(CreateInstanceCore(progId)));
+      return StaComProxy.Wrap(this, Invoke(() => Track(CreateInstanceCore(progId))));
     }
 
     /// <summary>
     /// Creates a COM object by ProgID and casts it to <typeparamref name="T"/>
-    /// (interop class or interface).
+    /// (interop class or interface). The raw RCW is returned; call UI methods
+    /// through <see cref="Invoke"/> or <see cref="InvokeAsync"/> so modal forms can close.
     /// </summary>
     public T CreateInstance<T>(string progId)
       where T : class
     {
-      object instance = CreateInstance(progId);
+      object instance = Invoke(() => Track(CreateInstanceCore(progId)));
       if (instance is T typed)
       {
         return typed;
@@ -149,11 +153,12 @@ namespace Vb6.ActiveX.Hosting
 
     /// <summary>
     /// Creates a COM object by CLSID on the host STA thread.
+    /// Late-bound calls on the returned object run on that thread (see <see cref="CreateInstance(string)"/>).
     /// The host owns the RCW until <see cref="Release"/> or <see cref="Dispose()"/>.
     /// </summary>
     public object CreateInstance(Guid clsid)
     {
-      return Invoke(() => Track(CreateInstanceCore(clsid)));
+      return StaComProxy.Wrap(this, Invoke(() => Track(CreateInstanceCore(clsid))));
     }
 
     /// <summary>
@@ -168,7 +173,7 @@ namespace Vb6.ActiveX.Hosting
         throw new ArgumentNullException(nameof(instance));
       }
 
-      Invoke(() => UntrackAndRelease(instance));
+      Invoke(() => UntrackAndRelease(StaComProxy.Unwrap(instance)));
     }
 
     /// <summary>Tracked VB6 forms (live titles). Safe to call from any thread.</summary>
@@ -341,6 +346,11 @@ namespace Vb6.ActiveX.Hosting
     internal static void NotifyModalLoopStarted(IMsoComponent? component)
     {
       t_current?.Windows.OnModalLoopStarted(component);
+    }
+
+    internal static void NotifyModalLoopPulse()
+    {
+      t_current?.Windows.EnsureModalEnabled();
     }
 
     internal void RaiseWindowOpened(HostWindowEventArgs e)

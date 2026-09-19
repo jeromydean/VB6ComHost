@@ -174,6 +174,15 @@ namespace Vb6.ActiveX.Hosting.Interop
       private const uint MsoGacActive = 0;
       private const uint MsoGacTracking = 1;
       private const uint MsoGacTrackingOrActive = 2;
+      private const uint WmClose = 0x0010;
+      private const uint WmSysCommand = 0x0112;
+      private const uint WmNcLButtonDown = 0x00A1;
+      private const uint ScClose = 0xF060;
+      private const uint HtClose = 20;
+      private const uint WmNcMouseFirst = 0x00A0;
+      private const uint WmNcMouseLast = 0x00AD;
+      private const uint WmMouseFirst = 0x0200;
+      private const uint WmMouseLast = 0x020E;
 
       [ThreadStatic]
       private static MsoComponentManagerStub? t_instance;
@@ -408,20 +417,16 @@ namespace Vb6.ActiveX.Hosting.Interop
           while (true)
           {
               ComHost.DrainPostedWork();
+              ComHost.NotifyModalLoopPulse();
               IMsoComponent component = _tracking ?? _active ?? requesting;
 
-              if (VB6StaMessagePump.Peek(out VB6StaMessagePump.MSG peeked, remove: false))
+              if (!ContinueLoop(component, uReason, pvLoopData, peekedMsg: null))
               {
-                  if (!ContinueLoop(component, uReason, pvLoopData, peeked))
-                  {
-                      return 1;
-                  }
+                  return 1;
+              }
 
-                  if (!VB6StaMessagePump.TryGetMessage(out VB6StaMessagePump.MSG msg))
-                  {
-                      return 0;
-                  }
-
+              if (VB6StaMessagePump.Peek(out VB6StaMessagePump.MSG msg, remove: true))
+              {
                   if (VB6StaMessagePump.IsQuit(in msg))
                   {
                       if (uReason != MsoLoopMain)
@@ -432,7 +437,12 @@ namespace Vb6.ActiveX.Hosting.Interop
                       return 1;
                   }
 
-                  if (component.FPreTranslateMessage(MsgPtr(in msg)) == 0)
+                  if (TryPostCloseFromTitleBar(in msg))
+                  {
+                      continue;
+                  }
+
+                  if (ShouldDispatch(component, in msg))
                   {
                       VB6StaMessagePump.TranslateAndDispatch(ref msg);
                   }
@@ -474,6 +484,54 @@ namespace Vb6.ActiveX.Hosting.Interop
                   }
               }
           }
+      }
+
+      private static bool TryPostCloseFromTitleBar(in VB6StaMessagePump.MSG msg)
+      {
+          if (msg.hwnd == IntPtr.Zero)
+          {
+              return false;
+          }
+
+          if (msg.message == WmSysCommand && (msg.wParam.ToUInt32() & 0xFFF0) == ScClose)
+          {
+              HostWindowTracker.PostClose(msg.hwnd);
+              return true;
+          }
+
+          if (msg.message == WmNcLButtonDown && msg.wParam.ToUInt32() == HtClose)
+          {
+              HostWindowTracker.PostClose(msg.hwnd);
+              return true;
+          }
+
+          return false;
+      }
+
+      private bool ShouldDispatch(IMsoComponent component, in VB6StaMessagePump.MSG msg)
+      {
+          if (IsPointerOrSystemCommand(in msg))
+          {
+              return true;
+          }
+
+          return component.FPreTranslateMessage(MsgPtr(in msg)) == 0;
+      }
+
+      private static bool IsPointerOrSystemCommand(in VB6StaMessagePump.MSG msg)
+      {
+          uint message = msg.message;
+          if (message == WmClose || message == WmSysCommand)
+          {
+              return true;
+          }
+
+          if (message >= WmNcMouseFirst && message <= WmNcMouseLast)
+          {
+              return true;
+          }
+
+          return message >= WmMouseFirst && message <= WmMouseLast;
       }
 
       private bool ContinueLoop(IMsoComponent component, uint uReason, IntPtr pvLoopData, VB6StaMessagePump.MSG? peekedMsg)

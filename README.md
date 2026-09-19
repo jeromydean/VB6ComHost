@@ -43,7 +43,7 @@ using (ComHost host = ComHost.Open(options))
 {
   host.ModelessWindowOpened += (_, e) => { /* not on the host STA thread */ };
   dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
-  launcher.ShowNonModal(1);
+  launcher.ShowNonModal(1); // late-bound calls run on the host STA thread
   foreach (HostWindowInfo window in host.GetWindows())
   {
     _ = window.Title;
