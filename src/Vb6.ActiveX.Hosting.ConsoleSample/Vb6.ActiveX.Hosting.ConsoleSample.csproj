@@ -4,15 +4,16 @@
     <TargetFramework>net48</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>VB6ComHost.ConsoleSample</RootNamespace>
-    <AssemblyName>VB6ComHost.ConsoleSample</AssemblyName>
+    <RootNamespace>Vb6.ActiveX.Hosting.ConsoleSample</RootNamespace>
+    <AssemblyName>Vb6.ActiveX.Hosting.ConsoleSample</AssemblyName>
+    <IsPackable>false</IsPackable>
     <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\VB6ComHost\VB6ComHost.csproj" />
+    <ProjectReference Include="..\Vb6.ActiveX.Hosting\Vb6.ActiveX.Hosting.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\lib\com\x86\ActiveXLibrary.dll" Link="ActiveXLibrary.dll">

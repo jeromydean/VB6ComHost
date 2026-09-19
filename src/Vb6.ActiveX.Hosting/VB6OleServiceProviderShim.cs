@@ -1,15 +1,19 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Vb6.ActiveX.Hosting;
 
-namespace VB6ComHost
+namespace Vb6.ActiveX.Hosting.Interop
 {
   /// <summary>COM <c>IServiceProvider</c>; must be public for <c>Marshal.GetComInterfaceForObject</c>.</summary>
+  [EditorBrowsable(EditorBrowsableState.Never)]
   [ComVisible(true)]
   [Guid("6D5140C1-7436-11CE-8034-00AA006009FA")]
   [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IOleServiceProvider
   {
+    /// <summary>Returns a service identified by <paramref name="rguidService"/> as <paramref name="riid"/>.</summary>
     [PreserveSig]
     int QueryService(IntPtr rguidService, IntPtr riid, IntPtr ppvObject);
   }
@@ -83,9 +87,7 @@ namespace VB6ComHost
 
       if (MsoComponentManagerIids.IsQueryServicePair(gService, gRiid))
       {
-        MsoComponentManagerStub stub = new MsoComponentManagerStub();
-        IntPtr p = Marshal.GetComInterfaceForObject(stub, typeof(IMsoComponentManager));
-        Marshal.WriteIntPtr(ppvObject, p);
+        Marshal.WriteIntPtr(ppvObject, MsoComponentManagerStub.AcquirePointer());
         return S_OK;
       }
 

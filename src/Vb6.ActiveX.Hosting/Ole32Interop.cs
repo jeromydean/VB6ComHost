@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace VB6ComHost
+namespace Vb6.ActiveX.Hosting
 {
   internal static class Ole32Interop
   {

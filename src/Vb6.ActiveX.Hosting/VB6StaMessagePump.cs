@@ -1,27 +1,32 @@
 using System;
+using System.ComponentModel;
 using System.Threading;
 using System.Runtime.InteropServices;
 
-namespace VB6ComHost
+namespace Vb6.ActiveX.Hosting
 {
   /// <summary>
-  /// Minimal STA <c>PeekMessage</c> / <c>DispatchMessage</c> loop for hosts that are not WinForms or WPF.
-  /// VB6 modeless forms still need a real Windows message pump on the same STA thread as the COM object.
+  /// Minimal STA <c>PeekMessage</c> / <c>DispatchMessage</c> loop. Used internally by <see cref="ComHost"/>.
+  /// Prefer <see cref="ComHost"/> unless you are pumping an STA thread yourself.
   /// </summary>
+  [EditorBrowsable(EditorBrowsableState.Advanced)]
   public static class VB6StaMessagePump
   {
+    private const uint PM_NOREMOVE = 0;
     private const uint PM_REMOVE = 0x0001;
     private const uint WM_QUIT = 0x0012;
+    private const uint QS_ALLINPUT = 0x04FF;
+    private const uint MWMO_INPUTAVAILABLE = 0x0004;
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct POINT
+    internal struct POINT
     {
       public int X;
       public int Y;
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MSG
+    internal struct MSG
     {
       public IntPtr hwnd;
       public uint message;
@@ -41,6 +46,68 @@ namespace VB6ComHost
 
     [DllImport("user32.dll")]
     private static extern IntPtr DispatchMessage(ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    private static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool WaitMessage();
+
+    [DllImport("user32.dll")]
+    private static extern void PostQuitMessage(int nExitCode);
+
+    [DllImport("user32.dll")]
+    private static extern uint MsgWaitForMultipleObjectsEx(
+      uint nCount,
+      IntPtr pHandles,
+      uint dwMilliseconds,
+      uint dwWakeMask,
+      uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern uint MsgWaitForMultipleObjects(
+      uint nCount,
+      IntPtr[] pHandles,
+      [MarshalAs(UnmanagedType.Bool)] bool bWaitAll,
+      uint dwMilliseconds,
+      uint dwWakeMask);
+
+    internal static bool Peek(out MSG msg, bool remove)
+    {
+      return PeekMessage(out msg, IntPtr.Zero, 0, 0, remove ? PM_REMOVE : PM_NOREMOVE);
+    }
+
+    internal static bool TryGetMessage(out MSG msg)
+    {
+      return GetMessage(out msg, IntPtr.Zero, 0, 0) != -1;
+    }
+
+    internal static bool IsQuit(in MSG msg)
+    {
+      return msg.message == WM_QUIT;
+    }
+
+    internal static void Wait()
+    {
+      _ = WaitMessage();
+    }
+
+    internal static void WaitForInput(uint milliseconds)
+    {
+      _ = MsgWaitForMultipleObjectsEx(0, IntPtr.Zero, milliseconds, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+    }
+
+    internal static void TranslateAndDispatch(ref MSG msg)
+    {
+      _ = TranslateMessage(ref msg);
+      _ = DispatchMessage(ref msg);
+    }
+
+    internal static void RepostQuit(in MSG msg)
+    {
+      PostQuitMessage((int)msg.wParam.ToUInt32());
+    }
 
     /// <summary>
     /// Runs until <paramref name="cancellationToken"/> is canceled or <c>WM_QUIT</c> is processed.
@@ -104,6 +171,15 @@ namespace VB6ComHost
     /// </summary>
     public static void RunWhile(Func<bool> shouldContinue)
     {
+      RunWhile(shouldContinue, wakeup: null);
+    }
+
+    /// <summary>
+    /// Runs while <paramref name="shouldContinue"/> returns true (evaluated when the queue is empty).
+    /// When <paramref name="wakeup"/> is signaled, the wait returns so the caller can drain work.
+    /// </summary>
+    public static void RunWhile(Func<bool> shouldContinue, WaitHandle? wakeup)
+    {
       if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA)
       {
         throw new InvalidOperationException(
@@ -135,8 +211,26 @@ namespace VB6ComHost
           break;
         }
 
-        Thread.Sleep(any ? 0 : 50);
+        if (wakeup != null)
+        {
+          WaitForInputOrHandle(wakeup, any ? 0u : 50u);
+        }
+        else
+        {
+          Thread.Sleep(any ? 0 : 50);
+        }
       }
+    }
+
+    internal static void WaitForInputOrHandle(WaitHandle handle, uint milliseconds)
+    {
+      if (handle == null)
+      {
+        throw new ArgumentNullException(nameof(handle));
+      }
+
+      IntPtr[] handles = { handle.SafeWaitHandle.DangerousGetHandle() };
+      _ = MsgWaitForMultipleObjects(1, handles, false, milliseconds, QS_ALLINPUT);
     }
   }
 }

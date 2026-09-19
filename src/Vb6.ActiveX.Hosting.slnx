@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Vb6.ActiveX.Hosting.ConsoleSample/Vb6.ActiveX.Hosting.ConsoleSample.csproj" Id="62a77cff-afc1-4996-8047-d41c3219197f" />
+  <Project Path="Vb6.ActiveX.Hosting/Vb6.ActiveX.Hosting.csproj" />
+  <Project Path="Vb6.ActiveX.Hosting.Tests/Vb6.ActiveX.Hosting.Tests.csproj" />
+</Solution>

@@ -1,7 +1,7 @@
 ActiveXLibrary (VB6)
 =====================
 
-Sample 32-bit ActiveX DLL used by VB6ComHost.ConsoleSample. It exposes class
+Sample 32-bit ActiveX DLL used by Vb6.ActiveX.Hosting.ConsoleSample. It exposes class
 WindowLauncher (ProgID ActiveXLibrary.WindowLauncher) with ShowNonModal /
 ShowModal. Each call sets the form caption to "VB6 modeless #n" or
 "VB6 modal #n" when the host passes an instance number (optional in VB).

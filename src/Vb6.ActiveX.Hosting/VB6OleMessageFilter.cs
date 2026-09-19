@@ -1,21 +1,27 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Vb6.ActiveX.Hosting;
 
-namespace VB6ComHost
+namespace Vb6.ActiveX.Hosting.Interop
 {
   /// <summary>COM <c>IMessageFilter</c>; must be public for <c>Marshal.GetComInterfaceForObject</c>.</summary>
+  [EditorBrowsable(EditorBrowsableState.Never)]
   [ComVisible(true)]
   [Guid("00000016-0000-0000-C000-000000000046")]
   [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
   public interface IMessageFilter
   {
+      /// <summary>Handles an incoming COM call on this thread.</summary>
       [PreserveSig]
       uint HandleInComingCall(uint dwCallType, IntPtr htaskCaller, uint dwTickCount, IntPtr lpInterfaceInfo);
 
+      /// <summary>Called when a rejected call may be retried.</summary>
       [PreserveSig]
       uint RetryRejectedCall(IntPtr htaskCallee, uint dwTickCount, uint dwRejectType);
 
+      /// <summary>Called while a COM call is pending and Windows messages arrive.</summary>
       [PreserveSig]
       uint MessagePending(IntPtr htaskCallee, uint dwTickCount, uint dwPendingType);
   }
@@ -59,14 +65,15 @@ namespace VB6ComHost
 
   internal sealed class VB6OleMessageFilterSession : IDisposable
   {
+      private VB6OleMessageFilter? _filter;
       private IntPtr _filterIface;
       private IntPtr _previousFilter;
 
       public VB6OleMessageFilterSession()
       {
-          Debug.WriteLine("VB6ComHost: registering managed IMessageFilter + IServiceProvider shim.");
-          VB6OleMessageFilter filter = new VB6OleMessageFilter();
-          _filterIface = Marshal.GetComInterfaceForObject(filter, typeof(IMessageFilter));
+          Debug.WriteLine("Vb6.ActiveX.Hosting: registering managed IMessageFilter + IServiceProvider shim.");
+          _filter = new VB6OleMessageFilter();
+          _filterIface = Marshal.GetComInterfaceForObject(_filter, typeof(IMessageFilter));
           RegisterHResult = Ole32Interop.CoRegisterMessageFilter(_filterIface, out _previousFilter);
       }
 
@@ -79,9 +86,21 @@ namespace VB6ComHost
               return;
           }
 
-          _ = Ole32Interop.CoRegisterMessageFilter(_previousFilter, out _);
+          _ = Ole32Interop.CoRegisterMessageFilter(_previousFilter, out IntPtr current);
+          if (current != IntPtr.Zero)
+          {
+              Marshal.Release(current);
+          }
+
+          if (_previousFilter != IntPtr.Zero)
+          {
+              Marshal.Release(_previousFilter);
+              _previousFilter = IntPtr.Zero;
+          }
+
           Marshal.Release(_filterIface);
           _filterIface = IntPtr.Zero;
+          _filter = null;
       }
   }
 
