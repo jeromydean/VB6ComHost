@@ -4,6 +4,14 @@ Host **VB6 ActiveX DLL** modeless and modal forms inside a .NET process. `ComHos
 
 Windows-only. Classic 32-bit VB6 DLLs must be loaded from an **x86** (or AnyCPU prefer-32-bit) process.
 
+## Run-time error 406
+
+VB6 shows this when `App.NonModalAllowed` is false:
+
+> Non-modal forms cannot be displayed in this host application from an ActiveX DLL, ActiveX Control, or Property Page.
+
+`ComHost` registers the OLE message filter and component manager that check looks for. `Show vbModeless` then works in-process, and the VB6 project stays an ActiveX DLL.
+
 ## Install
 
 ```bash
@@ -24,6 +32,35 @@ using (ComHost host = ComHost.Open())
 `CreateInstance` (non-generic) returns a late-bound proxy: `ShowModal` / `ShowNonModal` run on the host STA thread, so a modal form can be closed with the title-bar close box or `CloseWindows()`. The host tracks each RCW and releases it on `Dispose` (or earlier via `Release`). Do not call `Marshal.ReleaseComObject`. `CreateInstance<T>` returns the raw RCW — call UI methods through `Invoke` / `InvokeAsync`.
 
 `Show vbModal` blocks the caller until the form closes. From another thread, `CloseWindows()` or `HostWindowEventArgs.Close()` posts `WM_CLOSE`.
+
+## WinForms
+
+Open the host once on the UI thread and dispose it when the window closes. Disposing inside the button click closes the modeless form immediately.
+
+```csharp
+ComHost host = ComHost.Open(new ComHostOptions
+{
+  EventContext = SynchronizationContext.Current // events on this UI thread
+});
+
+// button click
+dynamic launcher = host.CreateInstance("YourLib.YourClass");
+launcher.ShowNonModal();
+
+// FormClosed
+host.Dispose();
+```
+
+The same `EventContext` pattern works for WPF.
+
+## Early-bound interop
+
+Use this when the project already has a COM reference from `tlbimp`. `Invoke` runs `Show` on the host STA thread.
+
+```csharp
+YourLib.YourClass launcher = host.CreateInstance<YourLib.YourClass>("YourLib.YourClass");
+host.Invoke(() => launcher.ShowNonModal());
+```
 
 ## Async
 
@@ -63,7 +100,7 @@ Activation failures throw `ComHostException` (ProgID/CLSID, HRESULT, `regsvr32` 
 
 ## Requirements
 
-- Windows, .NET Standard 2.0 or .NET 8+ Windows
+- Windows, .NET Standard 2.0 or .NET 10+ Windows
 - 32-bit process when loading 32-bit VB6 DLLs in-process
 - The ActiveX DLL registered (`regsvr32` from SysWOW64) or registration-free COM
 

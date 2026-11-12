@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
-#if NET8_0_OR_GREATER
+#if NET5_0_OR_GREATER
 using System.Runtime.Versioning;
 #endif
 using System.Threading;
@@ -21,7 +21,7 @@ namespace Vb6.ActiveX.Hosting
   /// when the host is disposed (or earlier via <see cref="Release"/>). Do not call
   /// <c>Marshal.ReleaseComObject</c> yourself.
   /// </summary>
-#if NET8_0_OR_GREATER
+#if NET5_0_OR_GREATER
   [SupportedOSPlatform("windows")]
 #endif
   public sealed class ComHost : IDisposable, IAsyncDisposable

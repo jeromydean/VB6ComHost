@@ -8,15 +8,15 @@
 
 > **Non-modal forms cannot be displayed in this host application from an ActiveX DLL, ActiveX Control, or Property Page.**
 
-That message appears when VB6 decides the host is **not** a suitable container for **modeless** UI from an **ActiveX DLL** (or related binaries). In code, the same gate is often reflected as **`App.NonModalAllowed`** being **False** when you expected modeless forms to work. The hosting pattern here is aimed at satisfying the checks behind that message—together with a proper **STA** thread and a **Windows message pump**—so modeless VB6 forms can run inside a .NET process.
+That message is **run-time error 406**. It appears when VB6 decides the host is **not** a suitable container for **modeless** UI from an **ActiveX DLL**, ActiveX control, or property page. In code, the same gate is **`App.NonModalAllowed`** being **False**. `ComHost` satisfies that check on a dedicated **STA** thread and message pump, so modeless VB6 forms run inside a .NET process and the VB6 project stays an in-process ActiveX DLL.
 
-Related search terms people use alongside that error: *VB6 modeless ActiveX DLL*, *NonModalAllowed*, *CoRegisterMessageFilter*, *IMessageFilter*, *IServiceProvider*, *IMsoComponentManager*, *KB 247791*, *VB6 host application*.
+Related search terms people use alongside that error: *error 406*, *VB6 modeless ActiveX DLL*, *NonModalAllowed*, *ActiveX EXE*, *CoRegisterMessageFilter*, *IMessageFilter*, *IServiceProvider*, *IMsoComponentManager*, *KB 247791*, *VB6 host application*.
 
 ---
 
 ## 🎯 What this repository provides
 
-**`Vb6.ActiveX.Hosting`** (class library, **.NET Standard 2.0**, Windows-only at runtime):
+**`Vb6.ActiveX.Hosting`** (class library, **netstandard2.0** and **net10.0-windows**, Windows-only at runtime):
 
 1. Registers a COM-visible STA **`IMessageFilter`** via `CoRegisterMessageFilter` (see [KB Q247791](https://support.microsoft.com/help/247791) context).
 2. Exposes **`IServiceProvider`** from that filter (via a CCW shim) so `QueryService` can answer the Office-style **`IMsoComponentManager` / `SID_SMsoComponentManager`** pair. The manager keeps VB6’s **`IMsoComponent`** registration and implements **`FPushMessageLoop`** as a nested `PeekMessage` / `GetMessage` pump so **`Show vbModal`** blocks until the form is dismissed.
@@ -64,13 +64,37 @@ await using (ComHost host = ComHost.Open())
 }
 ```
 
+WinForms (or WPF): open the host once on the UI thread and dispose it when the window closes. Disposing inside the button click closes the modeless form immediately.
+
+```csharp
+ComHost host = ComHost.Open(new ComHostOptions
+{
+  EventContext = SynchronizationContext.Current // events on this UI thread
+});
+
+// button click
+dynamic launcher = host.CreateInstance("ActiveXLibrary.WindowLauncher");
+launcher.ShowNonModal(1);
+
+// FormClosed
+host.Dispose();
+```
+
+Early-bound COM reference (`tlbimp`): `CreateInstance<T>` returns the raw RCW, so the `Show` call goes through `Invoke`.
+
+```csharp
+ActiveXLibrary.WindowLauncher launcher =
+  host.CreateInstance<ActiveXLibrary.WindowLauncher>("ActiveXLibrary.WindowLauncher");
+host.Invoke(() => launcher.ShowNonModal(1));
+```
+
 The NuGet listing uses [`src/Vb6.ActiveX.Hosting/README.md`](src/Vb6.ActiveX.Hosting/README.md). Pack from that project (GitHub repo is currently [jeromydean/VB6ComHost](https://github.com/jeromydean/VB6ComHost)):
 
 ```bash
 dotnet pack src/Vb6.ActiveX.Hosting/Vb6.ActiveX.Hosting.csproj -c Release
 ```
 
-The package targets **netstandard2.0** and **net8.0-windows**, is **Windows-only**, and must be consumed from a **32-bit (x86)** process when loading classic VB6 DLLs.
+The package targets **netstandard2.0** and **net10.0-windows**, is **Windows-only**, and must be consumed from a **32-bit (x86)** process when loading classic VB6 DLLs.
 
 ---
 
@@ -81,7 +105,7 @@ The package targets **netstandard2.0** and **net8.0-windows**, is **Windows-only
 | **Windows** | COM, `ole32`, `user32`, VB6 runtime are Win32-centric. |
 | **STA thread** | VB6 COM and the message filter still require STA; **`ComHost.Open()`** creates that thread and pump so callers do not have to. |
 | **32-bit (x86) process** when loading 32-bit VB6 DLLs in-process | VB6 ActiveX DLLs are normally **32-bit**; a 64-bit host cannot load them in-process. |
-| **.NET** | Library targets **.NET Standard 2.0**; the sample targets **net48** and references **`Microsoft.CSharp`** for `dynamic`. |
+| **.NET** | Library targets **netstandard2.0** and **net10.0-windows**; the sample targets **net48** and references **`Microsoft.CSharp`** for `dynamic`. |
 
 ---
 
@@ -92,7 +116,7 @@ lib/com/x86/              # Prebuilt sample ActiveXLibrary.dll (COM, 32-bit)
 vb6/ActiveXLibrary/       # VB6 project sources for that DLL
 src/
   Vb6.ActiveX.Hosting.slnx              # Visual Studio solution (.slnx)
-  Vb6.ActiveX.Hosting/                  # Class library (netstandard2.0)
+  Vb6.ActiveX.Hosting/                  # Class library (netstandard2.0, net10.0-windows)
   Vb6.ActiveX.Hosting.ConsoleSample/    # SDK-style console host (net48, x86)
   Vb6.ActiveX.Hosting.Tests/            # xUnit (net48, x86)
 ```
